@@ -119,7 +119,7 @@ def main():
     # Disclaimer
     st.sidebar.markdown("---")
     st.sidebar.warning("""
-        ⚠️ **Disclaimer**: 💝 Warning sweetie! Please use this tool responsibly. 🙏 If you have any feedback or issues, feel free to reach out to Shivam 👨‍💻. Stay healthy and take care! 🌟
+        ⚠️ **Disclaimer**: This tool provides general medical information only. Always consult a healthcare professional.
     """)
 
     if page == "Symptom Checker":
