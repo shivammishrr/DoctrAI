@@ -27,7 +27,7 @@ class DoctorAI:
                 {"role": "system", "content": self.context},
                 {"role": "user", "content": prompt}
             ],
-            model="deepseek-r1-distill-llama-70b-specdec",
+            model="llama-3.3-70b-specdec",
             temperature=0.5,
             max_tokens=1000
         )
@@ -51,7 +51,7 @@ class DoctorAI:
                 {"role": "system", "content": self.context},
                 {"role": "user", "content": prompt}
             ],
-            model="deepseek-r1-distill-llama-70b-specdec",
+            model="llama-3.3-70b-specdec",
             temperature=0.5,
             max_tokens=1000
         )
@@ -75,7 +75,7 @@ class DoctorAI:
                 {"role": "system", "content": self.context},
                 {"role": "user", "content": prompt}
             ],
-            model="deepseek-r1-distill-llama-70b-specdec",
+            model="llama-3.3-70b-specdec",
             temperature=0.5,
             max_tokens=1000
         )
