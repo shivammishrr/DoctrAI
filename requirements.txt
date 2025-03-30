@@ -13,3 +13,5 @@ beautifulsoup4==4.12.2
 # Added for model fallback mechanism
 tenacity==8.2.3
 backoff==2.2.1
+arxiv
+wikipedia
