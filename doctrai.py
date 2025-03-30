@@ -4,6 +4,7 @@ import requests
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 import json
+import datetime
 from groq import Groq
 import streamlit as st
 from langchain.tools import ArxivQueryRun, WikipediaQueryRun, Tool
@@ -473,7 +474,8 @@ class MedicalResearchOrchestrator:
             
             # Extract questions using regex
             questions_text = content
-            self._report_progress("Generated {len(questions_text.split('\n'))} research questions:\n{questions_text}", "complete")
+            split_pattern = '\n'
+            self._report_progress(f"Generated {len(questions_text.split(split_pattern))} research questions:\n{questions_text}", "complete")
             
             # Extract questions using regex
             questions = re.findall(r"\d+\.\s+(.*?)(?=\d+\.|$)", questions_text, re.DOTALL)
@@ -506,10 +508,10 @@ class MedicalResearchOrchestrator:
                 if tool_result and len(tool_result) > 0:
                     result_preview = tool_result[:1000] + "..." if len(tool_result) > 100 else tool_result
                     self.current_findings = result_preview
-                    self._report_progress(f"Results from {tool_name} ({len(tool_result)} chars): {result_preview}")
+                    self._report_progress(f"Results from {tool_name} ({len(tool_result)} chars)")
                     research_results.append(f"Results from {tool_name}:\n{tool_result}")
                 else:
-                    self._report_progress(f"No results from {tool_name}")
+                    self._report_progress(f"No significant results from {tool_name}")
             except Exception as e:
                 error_message = f"Error using {tool_name}: {str(e)}"
                 self._report_progress(error_message, "error")
@@ -596,29 +598,34 @@ Based on the above research findings, create a comprehensive medical report that
 
 Format the report with clear section headers, bullet points for key information, and a conclusion.
 Limit your response to a concise, focused report addressing only the most relevant information.
+
+IMPORTANT: Do not include any HTML tags or markdown formatting in your response. Use plain text only.
 """
         
         try:
             content, model_used = self.model_manager.create_completion(
-                messages=[{"role": "system", "content": "You are a medical research assistant that creates comprehensive reports based on research findings."},
+                messages=[{"role": "system", "content": "You are a medical research assistant that creates comprehensive reports based on research findings. Do not use HTML tags in your response."},
                          {"role": "user", "content": prompt}],
                 reasoning_level="high",
                 temperature=0.3,
                 max_tokens=1500
             )
             
+            # Clean any potential HTML tags from the content
+            content = content.replace("<", "&lt;").replace(">", "&gt;")
+            
             print(f"Used model: {model_used} for generating final report")
             self._report_progress("Final report generated successfully", "complete")
             
             # Format the final report with proper headers and structure
             final_report = f"""# MEDICAL RESEARCH REPORT
-## Query
+Query
 {query}
 
-## Research Findings
+Research Findings
 {content}
 
-## Research Methodology
+Research Methodology
 This report was generated using AI-assisted medical research tools including medical databases, 
 scientific literature, and clinical guidelines. The information provided is for educational purposes 
 and should not replace professional medical advice.
@@ -631,10 +638,10 @@ Report generated on: {datetime.datetime.now().strftime("%Y-%m-%d")}
             self._report_progress(f"Error generating final report: {str(e)}", "error")
             # Return a basic report with the raw findings in case of failure
             return f"""# MEDICAL RESEARCH REPORT (ERROR GENERATING FULL REPORT)
-## Query
+Query
 {query}
 
-## Raw Research Findings
+Raw Research Findings
 {formatted_findings}
 
 Note: An error occurred while generating the comprehensive report. The raw research findings are provided above.
@@ -689,687 +696,746 @@ Note: An error occurred while generating the comprehensive report. The raw resea
 
 # Streamlit Interface
 def main():
-    st.set_page_config(page_title="DoctrAI Medical Assistant", page_icon="🏥", layout="wide")
+    """Main Streamlit interface."""
+    global research_status  # Make research_status global
     
-    # Custom CSS for better styling
+    st.set_page_config(
+        page_title="DoctrAI - Medical Assistant",
+        page_icon="🩺",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
+    
+    # Custom CSS for better UI
     st.markdown("""
     <style>
-    .stApp {
-        max-width: 1200px;
-        margin: 0 auto;
+    /* Main app styling */
+    .main {
+        background-color: #0f172a;
+        color: #e2e8f0;
     }
-    .research-status {
-        background-color: #121212;
-        color: #e0e0e0;
-        border-left: 5px solid #BB86FC;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 15px 0;
-        font-family: 'Courier New', monospace;
-        white-space: pre-wrap;
-        word-break: break-word;
-        overflow-x: auto;
-        max-height: 400px;
-        overflow-y: auto;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    }
-    .stButton button {
-        background-color: #4CAF50;
+    
+    /* Header styling */
+    .main-header {
+        background: linear-gradient(135deg, #1e40af, #1e3a8a);
         color: white;
-        font-weight: bold;
-        border-radius: 20px;
-        padding: 5px 15px;
-        transition: all 0.3s ease;
+        padding: 1.8rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
     }
-    .stButton button:hover {
-        background-color: #388E3C;
+    
+    .main-header h1 {
+        margin: 0;
+        font-size: 2.7rem;
+        font-weight: 700;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    .main-header p {
+        margin-top: 0.7rem;
+        font-size: 1.2rem;
+        opacity: 0.95;
+    }
+    
+    /* Card styling */
+    .feature-card {
+        background: linear-gradient(to right, #1e293b, #0f172a);
+        border-radius: 12px;
+        padding: 1.8rem;
+        margin-bottom: 1.5rem;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        border-left: 6px solid #3b82f6;
     }
-    .deep-research-toggle {
+    
+    .feature-card h3 {
+        color: #60a5fa;
+        margin-top: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+    
+    /* Input fields */
+    .stTextInput > div > div > input {
+        border-radius: 8px;
+        border: 2px solid #334155;
+        padding: 0.7rem;
+        font-size: 1.05rem;
+        background-color: #1e293b;
+        color: #e2e8f0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+    }
+    
+    .stTextArea > div > div > textarea {
+        border-radius: 8px;
+        border: 2px solid #334155;
+        padding: 0.7rem;
+        font-size: 1.05rem;
+        background-color: #1e293b;
+        color: #e2e8f0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s;
+    }
+    
+    .stTextArea > div > div > textarea:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        background: linear-gradient(to right, #3b82f6, #60a5fa);
+        color: white;
+        border-radius: 8px;
+        border: none;
+        padding: 0.7rem 1.5rem;
+        font-weight: 600;
+        font-size: 1.05rem;
+        transition: all 0.3s;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    }
+    
+    .stButton > button:hover {
+        background: linear-gradient(to right, #2563eb, #3b82f6);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.25);
+    }
+    
+    /* Research status */
+    .research-status {
+        background: linear-gradient(to right, #1e293b, #0f172a);
+        border-radius: 10px;
+        padding: 1.2rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        border-left: 4px solid #3b82f6;
+    }
+    
+    .research-header {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #60a5fa;
+        margin-bottom: 0.7rem;
+        padding-bottom: 0.7rem;
+        border-bottom: 1px solid #334155;
+    }
+    
+    .research-subheader {
+        font-weight: 600;
+        color: #93c5fd;
+        margin: 0.5rem 0;
+    }
+    
+    .research-questions {
+        background-color: #1e293b;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 0.5rem;
+        border-left: 3px solid #60a5fa;
+        white-space: pre-line;
+    }
+    
+    .progress-indicator {
+        background-color: #3b82f6;
+        color: white;
+        display: inline-block;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+    
+    .sequential-question {
+        background-color: #1e293b;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 0.7rem;
+        border: 1px solid #334155;
+    }
+    
+    .question-header {
+        font-weight: 600;
+        color: #93c5fd;
+        margin-bottom: 0.5rem;
+    }
+    
+    .question-content {
+        font-size: 1.05rem;
+        line-height: 1.5;
+        color: #e2e8f0;
+    }
+    
+    .tool-active {
+        background-color: #172554;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 0.7rem;
+        border-left: 4px solid #60a5fa;
+    }
+    
+    .tool-indicator {
         display: flex;
         align-items: center;
-        margin-bottom: 10px;
+        font-weight: 500;
     }
-    .deep-research-toggle p {
-        margin: 0 10px 0 0;
-    }
-    .research-header {
-        color: #BB86FC;
-        font-weight: bold;
-        margin-bottom: 10px;
-        font-size: 1.2em;
-    }
-    .research-question {
-        color: #03DAC6;
-        margin: 8px 0;
-        font-weight: bold;
-    }
-    .research-tool {
-        color: #CF6679;
-        margin: 3px 0;
-    }
-    .critique-badge {
-        color: #FF9800;
-        margin: 5px 0;
-        font-weight: bold;
+    
+    .pulse {
         display: inline-block;
-        padding: 3px 8px;
-        border: 1px solid #FF9800;
-        border-radius: 12px;
-        font-size: 0.9em;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #60a5fa;
+        margin-right: 10px;
+        animation: pulse 1.5s infinite;
     }
+    
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.7);
+        }
+        70% {
+            box-shadow: 0 0 0 10px rgba(96, 165, 250, 0);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(96, 165, 250, 0);
+        }
+    }
+    
+    .tool-name-active {
+        color: #60a5fa;
+        font-weight: 600;
+    }
+    
     .research-complete {
-        color: #4CAF50;
-        font-weight: bold;
-    }
-    .research-error {
-        color: #FF5252;
-        font-weight: bold;
-    }
-    .tool-result {
-        background-color: #1E1E1E;
-        border-left: 3px solid #03DAC6;
-        padding: 10px;
-        margin: 8px 0;
-        border-radius: 5px;
-        font-family: 'Courier New', monospace;
-        font-size: 0.9em;
-    }
-    .sequential-question {
-        background-color: #1E1E1E;
-        border: 1px solid #BB86FC;
-        padding: 12px;
-        margin: 10px 0;
+        background-color: #064e3b;
+        color: #d1fae5;
+        padding: 0.7rem;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        margin-top: 0.7rem;
+        font-weight: 500;
     }
-    .question-header {
-        color: #03DAC6;
-        font-weight: bold;
-        margin-bottom: 8px;
-        font-size: 1.1em;
-        border-bottom: 1px solid #333;
-        padding-bottom: 5px;
-    }
-    .report-container {
-        background-color: #FFFFFF;
-        color: #333333;
-        border: 1px solid #DDDDDD;
+    
+    .validation-step, .synthesis-step, .complete-step {
+        padding: 0.7rem;
         border-radius: 8px;
+        margin-top: 0.7rem;
+        font-weight: 500;
+    }
+    
+    .validation-step {
+        background-color: #172554;
+        color: #bfdbfe;
+    }
+    
+    .synthesis-step {
+        background-color: #1e3a8a;
+        color: #bfdbfe;
+    }
+    
+    .complete-step {
+        background-color: #065f46;
+        color: #a7f3d0;
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+        background-color: #0f172a;
+        padding: 10px 10px 0 10px;
+        border-radius: 10px 10px 0 0;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background-color: #1e293b;
+        border-radius: 10px 10px 0 0;
+        padding: 12px 20px;
+        height: auto;
+        font-weight: 500;
+        font-size: 1.05rem;
+        color: #94a3b8;
+        transition: all 0.2s;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(to bottom, #3b82f6, #2563eb) !important;
+        color: white !important;
+        font-weight: 600 !important;
+        box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    .stTabs [data-baseweb="tab-panel"] {
+        background-color: #1e293b;
+        border-radius: 0 0 10px 10px;
         padding: 20px;
-        margin: 15px 0;
-        font-family: 'Arial', sans-serif;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
     }
-    .report-header {
-        color: #0066CC;
-        font-size: 1.4em;
-        font-weight: bold;
-        border-bottom: 2px solid #0066CC;
-        padding-bottom: 10px;
-        margin-bottom: 15px;
+    
+    /* Toggle switch */
+    .stCheckbox > div > label {
+        font-weight: 500;
+        color: #e2e8f0;
     }
-    .report-section {
-        margin: 15px 0;
+    
+    .stCheckbox > div > label > div {
+        background-color: #334155;
     }
-    .report-section-title {
-        color: #0066CC;
-        font-size: 1.2em;
-        font-weight: bold;
-        margin-bottom: 10px;
+    
+    .stCheckbox > div > label > div[data-baseweb="checkbox"] > div {
+        background-color: #3b82f6;
+    }
+    
+    /* Result container */
+    .result-container {
+        background: linear-gradient(to right, #1e293b, #0f172a);
+        border-radius: 12px;
+        padding: 1.8rem;
+        margin-top: 1.5rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        border-left: 6px solid #3b82f6;
+    }
+    
+    /* Footer */
+    .footer {
+        background-color: #1e293b;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-top: 2rem;
+        text-align: center;
+        font-size: 0.9rem;
+        color: #94a3b8;
+        border-top: 1px solid #334155;
+    }
+    
+    /* Override Streamlit's default text color */
+    .stMarkdown, .stMarkdown p, .stText, h1, h2, h3, h4, h5, h6, p, span, div {
+        color: #e2e8f0 !important;
+    }
+    
+    /* Override Streamlit's default background */
+    .stApp {
+        background-color: #0f172a;
     }
     </style>
     """, unsafe_allow_html=True)
     
-    # App title and introduction
-    st.title("🏥 DoctrAI Medical Assistant")
+    # Initialize session state
+    if 'doctor_ai' not in st.session_state:
+        st.session_state.doctor_ai = DoctorAI()
+        
+    doctor_ai = st.session_state.doctor_ai
+    
+    # Initialize research_status as a global placeholder
+    research_status = st.empty()
+    
+    # Header
     st.markdown("""
-    A powerful AI-powered medical assistant to help you understand symptoms, medications, and lifestyle recommendations.
-    """)
+    <div class="main-header">
+        <h1>🩺 DoctrAI Medical Assistant</h1>
+        <p>Your AI-powered medical research and advice companion</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Initialize doctor_ai instance
-    doctor_ai = DoctorAI()
-    
-    # Main tabs
+    # Create tabs for the three main features
     tab1, tab2, tab3 = st.tabs(["Symptom Checker", "Medication Information", "Lifestyle Recommendations"])
     
     # Symptom Checker Tab
     with tab1:
-        st.header("Symptom Checker")
-        st.markdown("Describe your symptoms below and get general medical advice.")
+        st.markdown("""
+        <div class="feature-card">
+            <h3>🔍 Symptom Checker</h3>
+            <p>Describe your symptoms in detail for a preliminary assessment.</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        symptoms = st.text_area("Describe your symptoms:", height=100, key="symptoms_input")
-        
-        # Deep research toggle near the query input
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            symptoms = st.text_area("Describe your symptoms:", height=150, 
+                                   placeholder="Example: I've been experiencing a persistent headache for the past 3 days, along with mild fever and fatigue...")
         with col2:
-            st.markdown('<div class="deep-research-toggle">', unsafe_allow_html=True)
-            deep_research = st.toggle("Use Deep Research", key="symptoms_research")
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.write("Research Options")
+            deep_research_symptoms = st.checkbox("Deep Research", key="symptoms_research", 
+                                              help="Uses multiple research tools to provide more comprehensive information")
         
-        if st.button("Get Medical Advice", key="symptoms_button"):
+        if st.button("Get Medical Advice", key="symptom_button"):
             if symptoms:
                 with st.spinner("Analyzing symptoms..."):
-                    if deep_research:
-                        # Show research status
-                        research_status = st.empty()
-                        questions = []
-                        current_tools = set()
-                        
-                        def report_progress(message, status="running"):
-                            # Filter and display only the most relevant information
-                            if "Generated" in message and "research questions" in message:
-                                # Extract and display research questions
-                                questions_text = message.split("Generated")[1].split("research questions")[0].strip()
-                                questions_list = message.split("\n- ")
-                                questions.clear()
-                                for q in questions_list[1:]:
-                                    questions.append(q.strip())
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Deep Medical Research</div>
-                                <div>Generated {questions_text} focused questions to investigate:</div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Researching question" in message:
-                                # Show only the current question being researched
-                                current_question = message.split("Researching question ")[1].split(":")[1].strip()
-                                question_number = message.split("Researching question ")[1].split("/")[0].strip()
-                                total_questions = message.split("/")[1].split(":")[0].strip()
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Deep Medical Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Question {question_number}/{total_questions}</div>
-                                    <div>{current_question}</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Using" in message and "to research" in message:
-                                # Show which tool is being used for the current question
-                                tool = message.split("Using ")[1].split(" to research")[0].strip()
-                                research_question = message.split("to research: ")[1].strip() if "to research:" in message else ""
-                                current_tools.add(tool)
-                                
-                                # Get the current question and question number from the orchestrator
-                                question_index = doctor_ai.research_system.current_question_index
-                                total_questions = len(doctor_ai.research_system.questions)
-                                current_question = doctor_ai.research_system.current_question
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Deep Medical Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Question {question_index+1}/{total_questions}</div>
-                                    <div>{current_question}</div>
-                                    <div style="margin-top:10px;">🔎 <span style="color:#CF6679;">Using {tool}</span> to find information...</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Results from" in message and "chars" in message:
-                                # Show results from a specific tool in a beautified manner
-                                tool = message.split("Results from ")[1].split(" (")[0].strip()
-                                chars = message.split("(")[1].split(" chars")[0].strip()
-                                result_preview = message.split("): ")[1].strip() if "): " in message else ""
-                                
-                                # Get the current question and question number from the orchestrator
-                                question_index = doctor_ai.research_system.current_question_index
-                                total_questions = len(doctor_ai.research_system.questions)
-                                current_question = doctor_ai.research_system.current_question
-                                current_findings = doctor_ai.research_system.current_findings
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Deep Medical Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Question {question_index+1}/{total_questions}</div>
-                                    <div>{current_question}</div>
-                                    <div style="margin-top:10px;">✅ <span style="color:#CF6679;">{tool}</span> found information ({chars} characters)</div>
-                                    <div class="tool-result">{current_findings[:500]}{'...' if len(current_findings) > 500 else ''}</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Validating findings for" in message:
-                                # Show when validation is happening
-                                question_text = message.split("Validating findings for: ")[1].strip() if "Validating findings for:" in message else "research findings"
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Deep Medical Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Validating Research</div>
-                                    <div>{question_text}</div>
-                                    <div style="margin-top:10px;"><span class="critique-badge">🔍 Medical Critique Agent</span> Validating accuracy of findings</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Synthesizing" in message and "comprehensive report" in message:
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Deep Medical Research</div>
-                                <div class="research-complete">✓ Research complete! Generating final medical report...</div>
-                                <div style="margin-top:10px;"><span class="critique-badge">✓ Findings validated by Medical Critique Agent</span></div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif status == "complete" and "Research process completed" in message:
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Deep Medical Research</div>
-                                <div class="research-complete">✓ Comprehensive medical report ready</div>
-                                <div style="margin-top:10px;"><span class="critique-badge">✓ All findings validated by Medical Critique Agent</span></div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
+                    if deep_research_symptoms:
+                        # Set up the progress reporting
+                        research_status = st.empty()  # Reset placeholder for this specific operation
                         doctor_ai.research_system.set_progress_callback(report_progress)
-                    
-                    advice = doctor_ai.get_medical_advice(symptoms, deep_research)
-                    
-                    st.markdown("### Medical Assessment")
-                    
-                    # Display the final report in a more professional format if deep research was used
-                    if deep_research:
-                        # Format the report with professional styling
-                        st.markdown("""
-                        <div class="report-container">
-                            <div class="report-header">Medical Research Report</div>
-                            <div class="report-content">
-                        """, unsafe_allow_html=True)
                         
-                        # Split the report into sections
-                        sections = advice.split("\n## ")
-                        
-                        # Display the first part (Executive Summary)
-                        st.markdown(sections[0], unsafe_allow_html=True)
-                        
-                        # Display remaining sections with better formatting
-                        for section in sections[1:]:
-                            section_title = section.split("\n")[0]
-                            section_content = "\n".join(section.split("\n")[1:])
-                            
-                            st.markdown(f"""
-                            <div class="report-section">
-                                <div class="report-section-title">## {section_title}</div>
-                                {section_content}
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        st.markdown("""
-                            </div>
+                        advice = doctor_ai.get_medical_advice(symptoms, deep_research=True)
+                        st.markdown(advice, unsafe_allow_html=True)
+                    else:
+                        advice = doctor_ai.get_medical_advice(symptoms)
+                        st.markdown(f"""
+                        <div class="result-container">
+                            {advice}
                         </div>
                         """, unsafe_allow_html=True)
-                    else:
-                        # Regular display for non-deep research results
-                        st.markdown(advice)
             else:
                 st.warning("Please describe your symptoms first.")
     
     # Medication Information Tab
     with tab2:
-        st.header("Medication Information")
-        st.markdown("Enter a medication name to get detailed information.")
+        st.markdown("""
+        <div class="feature-card">
+            <h3>💊 Medication Information</h3>
+            <p>Get detailed information about medications, including usage, side effects, and interactions.</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        medication = st.text_input("Medication name:", key="medication_input")
-        
-        # Deep research toggle near the query input
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            medication = st.text_input("Enter medication name:", 
+                                      placeholder="Example: Ibuprofen, Amoxicillin, Lisinopril...")
         with col2:
-            st.markdown('<div class="deep-research-toggle">', unsafe_allow_html=True)
-            deep_research_med = st.toggle("Use Deep Research", key="medication_research")
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.write("Research Options")
+            deep_research_med = st.checkbox("Deep Research", key="medication_research", 
+                                         help="Uses multiple research tools to provide more comprehensive information")
         
         if st.button("Get Medication Info", key="medication_button"):
             if medication:
-                with st.spinner("Researching medication..."):
+                with st.spinner("Researching medication information..."):
                     if deep_research_med:
-                        # Show research status
-                        research_status = st.empty()
-                        questions = []
-                        current_tools = set()
-                        
-                        def report_progress(message, status="running"):
-                            # Filter and display only the most relevant information
-                            if "Generated" in message and "research questions" in message:
-                                # Extract and display research questions
-                                questions_text = message.split("Generated")[1].split("research questions")[0].strip()
-                                questions_list = message.split("\n- ")
-                                questions.clear()
-                                for q in questions_list[1:]:
-                                    questions.append(q.strip())
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Medication Research</div>
-                                <div>Generated {questions_text} focused questions to investigate:</div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Researching question" in message:
-                                # Show only the current question being researched
-                                current_question = message.split("Researching question ")[1].split(":")[1].strip()
-                                question_number = message.split("Researching question ")[1].split("/")[0].strip()
-                                total_questions = message.split("/")[1].split(":")[0].strip()
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Medication Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Question {question_number}/{total_questions}</div>
-                                    <div>{current_question}</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Using" in message and "to research" in message:
-                                # Show which tool is being used for the current question
-                                tool = message.split("Using ")[1].split(" to research")[0].strip()
-                                research_question = message.split("to research: ")[1].strip() if "to research:" in message else ""
-                                current_tools.add(tool)
-                                
-                                # Get the current question and question number from the orchestrator
-                                question_index = doctor_ai.research_system.current_question_index
-                                total_questions = len(doctor_ai.research_system.questions)
-                                current_question = doctor_ai.research_system.current_question
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Medication Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Question {question_index+1}/{total_questions}</div>
-                                    <div>{current_question}</div>
-                                    <div style="margin-top:10px;">🔎 <span style="color:#CF6679;">Using {tool}</span> to find information...</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Results from" in message and "chars" in message:
-                                # Show results from a specific tool in a beautified manner
-                                tool = message.split("Results from ")[1].split(" (")[0].strip()
-                                chars = message.split("(")[1].split(" chars")[0].strip()
-                                result_preview = message.split("): ")[1].strip() if "): " in message else ""
-                                
-                                # Get the current question and question number from the orchestrator
-                                question_index = doctor_ai.research_system.current_question_index
-                                total_questions = len(doctor_ai.research_system.questions)
-                                current_question = doctor_ai.research_system.current_question
-                                current_findings = doctor_ai.research_system.current_findings
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Medication Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Question {question_index+1}/{total_questions}</div>
-                                    <div>{current_question}</div>
-                                    <div style="margin-top:10px;">✅ <span style="color:#CF6679;">{tool}</span> found information ({chars} characters)</div>
-                                    <div class="tool-result">{current_findings[:500]}{'...' if len(current_findings) > 500 else ''}</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Validating findings for" in message:
-                                # Show when validation is happening
-                                question_text = message.split("Validating findings for: ")[1].strip() if "Validating findings for:" in message else "research findings"
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Medication Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Validating Research</div>
-                                    <div>{question_text}</div>
-                                    <div style="margin-top:10px;"><span class="critique-badge">🔍 Medical Critique Agent</span> Validating accuracy of findings</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Synthesizing" in message and "comprehensive report" in message:
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Medication Research</div>
-                                <div class="research-complete">✓ Research complete! Generating final medication report...</div>
-                                <div style="margin-top:10px;"><span class="critique-badge">✓ Findings validated by Medical Critique Agent</span></div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif status == "complete" and "Research process completed" in message:
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Medication Research</div>
-                                <div class="research-complete">✓ Comprehensive medication report ready</div>
-                                <div style="margin-top:10px;"><span class="critique-badge">✓ All findings validated by Medical Critique Agent</span></div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
+                        # Set up the progress reporting
+                        research_status = st.empty()  # Reset placeholder for this specific operation
                         doctor_ai.research_system.set_progress_callback(report_progress)
-                    
-                    med_info = doctor_ai.get_medication_info(medication, deep_research_med)
-                    
-                    st.markdown("### Medication Information")
-                    
-                    # Display the final report in a more professional format if deep research was used
-                    if deep_research_med:
-                        # Format the report with professional styling
-                        st.markdown("""
-                        <div class="report-container">
-                            <div class="report-header">Medication Research Report</div>
-                            <div class="report-content">
-                        """, unsafe_allow_html=True)
                         
-                        # Split the report into sections
-                        sections = med_info.split("\n## ")
-                        
-                        # Display the first part (Executive Summary)
-                        st.markdown(sections[0], unsafe_allow_html=True)
-                        
-                        # Display remaining sections with better formatting
-                        for section in sections[1:]:
-                            section_title = section.split("\n")[0]
-                            section_content = "\n".join(section.split("\n")[1:])
-                            
-                            st.markdown(f"""
-                            <div class="report-section">
-                                <div class="report-section-title">## {section_title}</div>
-                                {section_content}
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        st.markdown("""
-                            </div>
+                        info = doctor_ai.get_medication_info(medication, deep_research=True)
+                        st.markdown(info, unsafe_allow_html=True)
+                    else:
+                        info = doctor_ai.get_medication_info(medication)
+                        st.markdown(f"""
+                        <div class="result-container">
+                            {info}
                         </div>
                         """, unsafe_allow_html=True)
-                    else:
-                        # Regular display for non-deep research results
-                        st.markdown(med_info)
             else:
                 st.warning("Please enter a medication name first.")
     
     # Lifestyle Recommendations Tab
     with tab3:
-        st.header("Lifestyle Recommendations")
-        st.markdown("Ask for lifestyle advice based on your health goals.")
+        st.markdown("""
+        <div class="feature-card">
+            <h3>🌱 Lifestyle Recommendations</h3>
+            <p>Get personalized lifestyle advice for managing health conditions.</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        lifestyle_query = st.text_area("What lifestyle advice are you looking for?", height=100, key="lifestyle_input")
-        
-        # Deep research toggle near the query input
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            condition = st.text_input("Enter health condition:", 
+                                     placeholder="Example: Type 2 Diabetes, Hypertension, Asthma...")
         with col2:
-            st.markdown('<div class="deep-research-toggle">', unsafe_allow_html=True)
-            deep_research_lifestyle = st.toggle("Use Deep Research", key="lifestyle_research")
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.write("Research Options")
+            deep_research_lifestyle = st.checkbox("Deep Research", key="lifestyle_research", 
+                                               help="Uses multiple research tools to provide more comprehensive information")
         
         if st.button("Get Lifestyle Advice", key="lifestyle_button"):
-            if lifestyle_query:
+            if condition:
                 with st.spinner("Generating lifestyle recommendations..."):
                     if deep_research_lifestyle:
-                        # Show research status
-                        research_status = st.empty()
-                        questions = []
-                        current_tools = set()
-                        
-                        def report_progress(message, status="running"):
-                            # Filter and display only the most relevant information
-                            if "Generated" in message and "research questions" in message:
-                                # Extract and display research questions
-                                questions_text = message.split("Generated")[1].split("research questions")[0].strip()
-                                questions_list = message.split("\n- ")
-                                questions.clear()
-                                for q in questions_list[1:]:
-                                    questions.append(q.strip())
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Lifestyle Research</div>
-                                <div>Generated {questions_text} focused questions to investigate:</div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Researching question" in message:
-                                # Show only the current question being researched
-                                current_question = message.split("Researching question ")[1].split(":")[1].strip()
-                                question_number = message.split("Researching question ")[1].split("/")[0].strip()
-                                total_questions = message.split("/")[1].split(":")[0].strip()
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Lifestyle Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Question {question_number}/{total_questions}</div>
-                                    <div>{current_question}</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Using" in message and "to research" in message:
-                                # Show which tool is being used for the current question
-                                tool = message.split("Using ")[1].split(" to research")[0].strip()
-                                research_question = message.split("to research: ")[1].strip() if "to research:" in message else ""
-                                current_tools.add(tool)
-                                
-                                # Get the current question and question number from the orchestrator
-                                question_index = doctor_ai.research_system.current_question_index
-                                total_questions = len(doctor_ai.research_system.questions)
-                                current_question = doctor_ai.research_system.current_question
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Lifestyle Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Question {question_index+1}/{total_questions}</div>
-                                    <div>{current_question}</div>
-                                    <div style="margin-top:10px;">🔎 <span style="color:#CF6679;">Using {tool}</span> to find information...</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Results from" in message and "chars" in message:
-                                # Show results from a specific tool in a beautified manner
-                                tool = message.split("Results from ")[1].split(" (")[0].strip()
-                                chars = message.split("(")[1].split(" chars")[0].strip()
-                                result_preview = message.split("): ")[1].strip() if "): " in message else ""
-                                
-                                # Get the current question and question number from the orchestrator
-                                question_index = doctor_ai.research_system.current_question_index
-                                total_questions = len(doctor_ai.research_system.questions)
-                                current_question = doctor_ai.research_system.current_question
-                                current_findings = doctor_ai.research_system.current_findings
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Lifestyle Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Question {question_index+1}/{total_questions}</div>
-                                    <div>{current_question}</div>
-                                    <div style="margin-top:10px;">✅ <span style="color:#CF6679;">{tool}</span> found information ({chars} characters)</div>
-                                    <div class="tool-result">{current_findings[:500]}{'...' if len(current_findings) > 500 else ''}</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Validating findings for" in message:
-                                # Show when validation is happening
-                                question_text = message.split("Validating findings for: ")[1].strip() if "Validating findings for:" in message else "research findings"
-                                
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Lifestyle Research</div>
-                                <div class="sequential-question">
-                                    <div class="question-header">Validating Research</div>
-                                    <div>{question_text}</div>
-                                    <div style="margin-top:10px;"><span class="critique-badge">🔍 Medical Critique Agent</span> Validating accuracy of findings</div>
-                                </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif "Synthesizing" in message and "comprehensive report" in message:
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Lifestyle Research</div>
-                                <div class="research-complete">✓ Research complete! Generating final lifestyle report...</div>
-                                <div style="margin-top:10px;"><span class="critique-badge">✓ Findings validated by Medical Critique Agent</span></div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            elif status == "complete" and "Research process completed" in message:
-                                research_status.markdown(f"""
-                                <div class="research-status">
-                                <div class="research-header">🔍 Lifestyle Research</div>
-                                <div class="research-complete">✓ Comprehensive lifestyle report ready</div>
-                                <div style="margin-top:10px;"><span class="critique-badge">✓ All findings validated by Medical Critique Agent</span></div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
+                        # Set up the progress reporting
+                        research_status = st.empty()  # Reset placeholder for this specific operation
                         doctor_ai.research_system.set_progress_callback(report_progress)
-                    
-                    lifestyle_advice = doctor_ai.get_lifestyle_advice(lifestyle_query, deep_research_lifestyle)
-                    
-                    st.markdown("### Lifestyle Recommendations")
-                    
-                    # Display the final report in a more professional format if deep research was used
-                    if deep_research_lifestyle:
-                        # Format the report with professional styling
-                        st.markdown("""
-                        <div class="report-container">
-                            <div class="report-header">Lifestyle Research Report</div>
-                            <div class="report-content">
-                        """, unsafe_allow_html=True)
                         
-                        # Split the report into sections
-                        sections = lifestyle_advice.split("\n## ")
-                        
-                        # Display the first part (Executive Summary)
-                        st.markdown(sections[0], unsafe_allow_html=True)
-                        
-                        # Display remaining sections with better formatting
-                        for section in sections[1:]:
-                            section_title = section.split("\n")[0]
-                            section_content = "\n".join(section.split("\n")[1:])
-                            
-                            st.markdown(f"""
-                            <div class="report-section">
-                                <div class="report-section-title">## {section_title}</div>
-                                {section_content}
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        st.markdown("""
-                            </div>
+                        advice = doctor_ai.get_lifestyle_advice(condition, deep_research=True)
+                        st.markdown(advice, unsafe_allow_html=True)
+                    else:
+                        advice = doctor_ai.get_lifestyle_advice(condition)
+                        st.markdown(f"""
+                        <div class="result-container">
+                            {advice}
                         </div>
                         """, unsafe_allow_html=True)
-                    else:
-                        # Regular display for non-deep research results
-                        st.markdown(lifestyle_advice)
             else:
-                st.warning("Please enter your lifestyle query first.")
+                st.warning("Please enter a health condition first.")
     
     # Footer
     st.markdown("---")
-    st.markdown("*Disclaimer: This AI assistant provides general information and is not a substitute for professional medical advice. Always consult with a healthcare provider for medical concerns.*")
+    st.markdown("""
+    <div class="footer">
+        <strong>Disclaimer:</strong> This tool provides general information only and should not replace professional medical advice.
+        <p>&copy; 2025 DoctrAI Medical Assistant | Developed with ❤️ for healthcare</p>
+    </div>
+    """, unsafe_allow_html=True)
 
+# Progress reporting function for deep research
+def report_progress(message, status="running"):
+    """Report progress from the research orchestrator to the UI."""
+    global research_status  # Access the global research_status
+    
+    # Filter and display only the most relevant information
+    if "Generated" in message and "research questions" in message:
+        # Extract and display research questions
+        try:
+            if ":\n" in message:
+                questions_text = message.split(":\n")[1].strip()
+                # Format the questions for better display
+                formatted_questions = questions_text.replace("- ", "• ").replace("\n", "<br>")
+                
+                research_status.markdown(f"""
+                <div class="research-status">
+                <div class="research-header">🔍 Research Progress</div>
+                <div class="research-subheader">Generated Research Questions:</div>
+                <div class="research-questions">{formatted_questions}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                questions_text = message.split("Generated")[1].split("research questions")[0].strip()
+                research_status.markdown(f"""
+                <div class="research-status">
+                <div class="research-header">🔍 Research Progress</div>
+                <div>Generated {questions_text} focused questions to investigate</div>
+                </div>
+                """, unsafe_allow_html=True)
+        except Exception as e:
+            print(f"Error displaying research questions: {str(e)}")
+            research_status.markdown(f"""
+            <div class="research-status">
+            <div class="research-header">🔍 Research Progress</div>
+            <div>Generating research questions...</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    elif "Researching question" in message:
+        # Show the current question being researched with progress indicator
+        try:
+            # Handle format: "Researching question {i+1}/{len(self.questions)}: {question}"
+            if "/" in message and ":" in message:
+                progress = message.split("Researching question ")[1].split(":")[0].strip()
+                current_question = message.split(":", 1)[1].strip()
+                
+                research_status.markdown(f"""
+                <div class="research-status">
+                <div class="research-header">🔍 Research Progress</div>
+                <div class="sequential-question">
+                    <div class="question-header">Question {progress}</div>
+                    <div>{current_question}</div>
+                </div>
+                </div>
+                """, unsafe_allow_html=True)
+            # Handle simple format: "Researching question: {question}"
+            elif ": " in message:
+                current_question = message.split(": ")[1].strip()
+                
+                research_status.markdown(f"""
+                <div class="research-status">
+                <div class="research-header">🔍 Research Progress</div>
+                <div class="sequential-question">
+                    <div class="question-header">Current Research Question</div>
+                    <div>{current_question}</div>
+                </div>
+                </div>
+                """, unsafe_allow_html=True)
+        except Exception as e:
+            print(f"Error displaying research question: {str(e)}")
+            # Fallback if parsing fails
+            research_status.markdown(f"""
+            <div class="research-status">
+            <div class="research-header">🔍 Research Progress</div>
+            <div>Researching...</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    elif "Using" in message and "to research" in message:
+        # Show which tool is being used for the current question
+        try:
+            tool = message.split("Using ")[1].split(" to research")[0].strip()
+            research_question = message.split("to research: ")[1].strip() if "to research:" in message else ""
+            
+            # Get the current question and question number from the orchestrator
+            try:
+                if hasattr(doctor_ai, 'research_system'):
+                    question_index = doctor_ai.research_system.current_question_index
+                    total_questions = len(doctor_ai.research_system.questions)
+                    current_question = doctor_ai.research_system.current_question
+                else:
+                    # Parse from the message if possible
+                    if "Question" in message and "/" in message:
+                        parts = message.split("Question ")
+                        if len(parts) > 1:
+                            question_info = parts[1].split(":")
+                            if len(question_info) > 0:
+                                question_numbers = question_info[0].split("/")
+                                if len(question_numbers) > 1:
+                                    question_index = int(question_numbers[0].strip()) - 1
+                                    total_questions = int(question_numbers[1].strip())
+                                else:
+                                    question_index = 0
+                                    total_questions = 1
+                            else:
+                                question_index = 0
+                                total_questions = 1
+                        else:
+                            question_index = 0
+                            total_questions = 1
+                    else:
+                        question_index = 0
+                        total_questions = 1
+                    
+                    current_question = research_question if research_question else "Research question"
+            except Exception as e:
+                print(f"Error getting question info: {str(e)}")
+                question_index = 0
+                total_questions = 1
+                current_question = research_question if research_question else "Research question"
+            
+            research_status.markdown(f"""
+            <div class="research-status">
+            <div class="research-header">🔍 Research Progress</div>
+            <div class="sequential-question">
+                <div class="question-header">Question {question_index+1}/{total_questions}</div>
+                <div>{current_question}</div>
+                <div style="margin-top:10px;">🔎 <span style="color:#CF6679;">Using {tool}</span> to find information...</div>
+            </div>
+            </div>
+            """, unsafe_allow_html=True)
+        except Exception as e:
+            print(f"Error displaying tool usage: {str(e)}")
+            research_status.markdown(f"""
+            <div class="research-status">
+            <div class="research-header">🔍 Research Progress</div>
+            <div>Using research tools to find information...</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    elif "Results from" in message and "chars" in message:
+        # Show results from a specific tool in a beautified manner
+        try:
+            tool = message.split("Results from ")[1].split(" (")[0].strip()
+            chars = message.split("(")[1].split(" chars")[0].strip()
+            
+            # Get the current question and question number from the orchestrator
+            try:
+                if hasattr(doctor_ai, 'research_system'):
+                    question_index = doctor_ai.research_system.current_question_index
+                    total_questions = len(doctor_ai.research_system.questions)
+                    current_question = doctor_ai.research_system.current_question
+                    current_findings = doctor_ai.research_system.current_findings
+                else:
+                    question_index = 0
+                    total_questions = 1
+                    current_question = "Research question"
+                    current_findings = "Research findings in progress..."
+            except Exception as e:
+                print(f"Error getting research info: {str(e)}")
+                question_index = 0
+                total_questions = 1
+                current_question = "Research question"
+                current_findings = "Research findings in progress..."
+            
+            # Ensure we have some content for current_findings
+            if not current_findings or len(current_findings) == 0:
+                current_findings = "Research findings in progress..."
+            
+            research_status.markdown(f"""
+            <div class="research-status">
+            <div class="research-header">🔍 Research Progress</div>
+            <div class="sequential-question">
+                <div class="question-header">Question {question_index+1}/{total_questions}</div>
+                <div>{current_question}</div>
+                <div style="margin-top:10px;">✅ <span style="color:#CF6679;">{tool}</span> found information ({chars} characters)</div>
+                <div class="tool-result">{current_findings[:500]}{'...' if len(current_findings) > 500 else ''}</div>
+            </div>
+            </div>
+            """, unsafe_allow_html=True)
+        except Exception as e:
+            print(f"Error displaying tool results: {str(e)}")
+            research_status.markdown(f"""
+            <div class="research-status">
+            <div class="research-header">🔍 Research Progress</div>
+            <div class="tool-result">
+                <div class="tool-name">✓ Research tool found information</div>
+            </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    elif "Validating findings" in message:
+        # Show when validation is happening
+        try:
+            question_text = "research findings"
+            if "for:" in message:
+                question_text = message.split("for:")[1].strip()
+            
+            research_status.markdown(f"""
+            <div class="research-status">
+            <div class="research-header">🔍 Research Progress</div>
+            <div class="sequential-question">
+                <div class="question-header">Validating Research</div>
+                <div>{question_text}</div>
+                <div style="margin-top:10px;"><span class="critique-badge">🔍 Medical Critique Agent</span> Validating accuracy of findings</div>
+            </div>
+            </div>
+            """, unsafe_allow_html=True)
+        except Exception as e:
+            print(f"Error displaying validation: {str(e)}")
+            research_status.markdown(f"""
+            <div class="research-status">
+            <div class="research-header">🔍 Research Progress</div>
+            <div class="validation-step">🔎 Validating research findings for accuracy...</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    elif "Synthesizing" in message and "comprehensive report" in message:
+        research_status.markdown(f"""
+        <div class="research-status">
+        <div class="research-header">🔍 Research Progress</div>
+        <div class="research-complete">✓ Research complete! Generating final report...</div>
+        <div style="margin-top:10px;"><span class="critique-badge">✓ Findings validated by Medical Critique Agent</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    elif status == "complete" and "Research process completed" in message:
+        research_status.markdown(f"""
+        <div class="research-status">
+        <div class="research-header">🔍 Research Progress</div>
+        <div class="research-complete">✓ Comprehensive report ready</div>
+        <div style="margin-top:10px;"><span class="critique-badge">✓ All findings validated by Medical Critique Agent</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    elif "LLM call" in message:
+        # Show when LLM is being called
+        research_status.markdown(f"""
+        <div class="research-status">
+        <div class="research-header">🔍 Research Progress</div>
+        <div>AI processing: {message.replace("LLM call:", "").strip()}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    elif "LLM response received" in message:
+        # Show when LLM response is received
+        research_status.markdown(f"""
+        <div class="research-status">
+        <div class="research-header">🔍 Research Progress</div>
+        <div>AI completed: {message.replace("LLM response received", "").strip()}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    elif status == "error":
+        research_status.markdown(f"""
+        <div class="research-status" style="border-left: 5px solid #f44336;">
+        <div class="research-header" style="color: #f44336;">⚠️ Research Error</div>
+        <div>{message}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    else:
+        # Default display for other messages
+        research_status.markdown(f"""
+        <div class="research-status">
+        <div class="research-header">🔍 Research Progress</div>
+        <div>{message}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
 if __name__ == "__main__":
     main()
