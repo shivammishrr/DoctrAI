@@ -2,7 +2,6 @@
    __pycache__/
    *.py[cod]
    *$py.class
-   .env
    
    # Virtual Environment
    venv/
@@ -11,3 +10,29 @@
    # IDE
    .vscode/
    .idea/
+
+   # React/Node.js
+   node_modules/
+   /frontend/node_modules
+   /frontend/build
+   /frontend/.pnp
+   /frontend/.pnp.js
+   /frontend/coverage
+   /frontend/.DS_Store
+   /frontend/.env.local
+   /frontend/.env.development.local
+   /frontend/.env.test.local
+   /frontend/.env.production.local
+   /frontend/npm-debug.log*
+   /frontend/yarn-debug.log*
+   /frontend/yarn-error.log*
+
+   # Flask
+   /static
+   /__pycache__
+   .pytest_cache/
+   .coverage
+   htmlcov/
+   dist/
+   build/
+   *.egg-info/
