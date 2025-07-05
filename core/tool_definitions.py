@@ -2,24 +2,6 @@ from typing import List, Dict, Any
 
 # Tool schemas for Groq function calling
 
-TAVILY_SEARCH_SCHEMA = {
-    "type": "function",
-    "function": {
-        "name": "tavily_medical_search",
-        "description": "Performs a targeted medical search using Tavily Search API. Use for finding recent medical papers, clinical trials, or specific medical information.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The medical search query."
-                }
-            },
-            "required": ["query"]
-        }
-    }
-}
-
 ARXIV_SEARCH_SCHEMA = {
     "type": "function",
     "function": {
@@ -56,17 +38,17 @@ WIKIPEDIA_SEARCH_SCHEMA = {
     }
 }
 
-GOOGLE_SEARCH_SCHEMA = {
+TAVILY_SEARCH_SCHEMA = {
     "type": "function",
     "function": {
-        "name": "google_medical_search",
-        "description": "Performs a general Google search for medical information, prioritizing reputable sources. Use when other specialized tools don\'t yield sufficient results or for very broad queries.",
+        "name": "tavily_medical_search",
+        "description": "Performs a comprehensive web search using the Tavily API, optimized for providing concise and relevant answers to medical questions. Use this for up-to-date information, recent news, or when other specialized tools are insufficient.",
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The medical search query for Google."
+                    "description": "The medical search query for Tavily."
                 }
             },
             "required": ["query"]
@@ -76,8 +58,7 @@ GOOGLE_SEARCH_SCHEMA = {
 
 # List of all available tool schemas
 ALL_TOOL_SCHEMAS: List[Dict[str, Any]] = [
-    TAVILY_SEARCH_SCHEMA,
     ARXIV_SEARCH_SCHEMA,
     WIKIPEDIA_SEARCH_SCHEMA,
-    GOOGLE_SEARCH_SCHEMA
-] 
+    TAVILY_SEARCH_SCHEMA
+]

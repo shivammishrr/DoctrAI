@@ -1,131 +1,171 @@
-from core.model_manager import ModelManager
-from core.research_orchestrator import MedicalResearchOrchestrator
+import re
+import json
+import threading
+from queue import Queue
 from typing import Callable, Optional, Dict, Any
 
+from core.model_manager import ModelManager
+from core.research_orchestrator import MedicalResearchOrchestrator
+from core.prompts import get_persona_prompt
+
 class DoctorAI:
-    """AI Medical Assistant providing advice and orchestrating deep research."""
+    """
+    Manages conversational interactions and orchestrates deep medical research.
+    It now has two distinct entry points:
+    1. process_turn(): For standard ReAct-based conversational turns.
+    2. start_deep_research(): For directly initiating a non-blocking research task.
+    """
     
     def __init__(self):
         self.model_manager = ModelManager()
         self.research_orchestrator = MedicalResearchOrchestrator(self.model_manager)
-        self.context_simple_query = (
-            "You are an advanced AI medical assistant. Provide direct, clear, and actionable medical "
-            "information and advice based on established medical science and clinical guidelines. "
-            "Focus on delivering practical insights and evidence-based recommendations. "
-            "Do not use tools for this request, answer directly based on your knowledge."
+        self.sessions: Dict[str, Dict[str, Any]] = {}
+
+    def _get_or_create_session(self, session_id: str, persona: str) -> Dict[str, Any]:
+        """Retrieves or initializes a session with a persona-specific prompt."""
+        if session_id not in self.sessions:
+            system_prompt = get_persona_prompt(persona)
+            self.sessions[session_id] = {
+                "history": [{"role": "system", "content": system_prompt}]
+            }
+        return self.sessions[session_id]
+
+    def _parse_react_response(self, response_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Parses the LLM's ReAct response into a structured dictionary.
+        This parser is designed to be robust against extra text added by the LLM.
+        """
+        try:
+            thought_match = re.search(r"Thought: (.*?)\nAction:", response_text, re.DOTALL)
+            action_match = re.search(r"Action: (.*?)\nAction Input:", response_text, re.DOTALL)
+            action_input_prefix_match = re.search(r"Action Input:", response_text, re.DOTALL)
+
+            if not (thought_match and action_match and action_input_prefix_match):
+                print(f"Warning: ReAct response parsing failed. Key markers not found. Response: {response_text}")
+                # MODIFIED: Instead of returning None, return the raw text as a final answer.
+                # This makes the agent more resilient if it fails to format correctly.
+                return {"type": "final_answer", "content": response_text}
+
+            json_start_index = action_input_prefix_match.end()
+            json_str = response_text[json_start_index:].strip()
+            
+            first_brace = json_str.find('{')
+            if first_brace == -1: return None
+            json_str = json_str[first_brace:]
+
+            brace_count = 0
+            end_index = -1
+            for i, char in enumerate(json_str):
+                if char == '{': brace_count += 1
+                elif char == '}': brace_count -= 1
+                if brace_count == 0:
+                    end_index = i + 1
+                    break
+            
+            if end_index == -1: return None
+
+            isolated_json_str = json_str[:end_index]
+            action_input = json.loads(isolated_json_str)
+            
+            return {
+                "thought": thought_match.group(1).strip(),
+                "action": action_match.group(1).strip(),
+                "action_input": action_input,
+            }
+        except Exception as e:
+            print(f"Error parsing ReAct response: {e}\nResponse text: {response_text}")
+            # MODIFIED: Graceful fallback
+            return {"type": "final_answer", "content": response_text}
+
+    # NEW: Dedicated method to start deep research directly from the UI.
+    def start_deep_research(self, session_id: str, query: str, persona: str, progress_queue: Queue):
+        """
+        Initiates a deep research task in a non-blocking background thread.
+        This method is called when the user explicitly enables 'Deep Research' mode.
+        
+        Args:
+            session_id: The ID of the current user session.
+            query: The research topic provided by the user.
+            persona: The AI persona for context (e.g., 'symptom').
+            progress_queue: The queue to send real-time progress updates to the UI.
+        """
+        # This logic is moved from the old `process_turn` method.
+        def research_callback(message: str, status: str):
+            """Puts progress updates into the queue for the UI to display."""
+            progress_queue.put({"type": "progress", "message": message, "status": status})
+
+        def research_thread_target():
+            """The target function for the background thread."""
+            # Use a dictionary to capture the return value from the thread.
+            result_container = {}
+            
+            # NOTE: Assumes your orchestrator has these methods.
+            # If your orchestrator takes the callback directly, you can simplify this.
+            self.research_orchestrator.set_progress_callback(research_callback)
+            
+            # Run the main research workflow.
+            # We assume `run_research_workflow` populates the `result_container`.
+            self.research_orchestrator.run_research_workflow(query, result_container)
+            
+            # Once complete, put the final report into the queue.
+            final_report = result_container.get("report", "Research completed, but the final report is missing.")
+            progress_queue.put({"type": "complete", "report": final_report})
+
+        # Create and start the background thread.
+        research_thread = threading.Thread(target=research_thread_target)
+        research_thread.start()
+        
+        # This function returns immediately, allowing the UI to remain responsive.
+
+    # MODIFIED: This method is now ONLY for conversation.
+    def process_turn(self, session_id: str, user_input: str, persona: str) -> Dict[str, Any]:
+        """
+        Processes one turn of a standard conversation using the ReAct agent framework.
+        This does NOT handle deep research initiation anymore.
+        """
+        session = self._get_or_create_session(session_id, persona)
+        
+        # Handle special system messages or standard user input
+        if user_input.startswith("SYSTEM_MESSAGE:"):
+            # This is for providing context back to the agent, e.g., after research is done.
+            session["history"].append({"role": "tool_observation", "content": f"Observation: {user_input}"})
+        else:
+            session["history"].append({"role": "user", "content": user_input})
+
+        # Get the AI's ReAct response
+        response_message, _ = self.model_manager.create_completion(
+            messages=session["history"],
+            reasoning_level="high", temperature=0.4, max_tokens=1000
         )
 
-    def set_progress_callback(self, callback_function: Optional[Callable[[str, str], None]] = None) -> None:
-        """Sets the progress callback for the research orchestrator."""
-        if callback_function:
-            self.research_orchestrator.set_progress_callback(callback_function)
+        if not response_message or not response_message.content:
+            return {"type": "error", "content": "I apologize, but I encountered a problem and can't respond right now."}
 
-    def get_current_research_state(self) -> Dict[str, Any]:
-        """Returns the current state of the research orchestrator for UI updates."""
-        return self.research_orchestrator.current_research_state
+        parsed_response = self._parse_react_response(response_message.content)
+        
+        # If parsing fails or returns a raw answer, use it directly.
+        if not parsed_response or parsed_response.get("action") is None:
+            return {"type": "final_answer", "content": parsed_response.get("content", "I'm having trouble formulating a structured response. Could you rephrase?")}
+        
+        # Add the full thought/action process to history for context in the next turn
+        session["history"].append({"role": "assistant", "content": response_message.content})
 
-    def get_medical_advice(self, symptoms: str, deep_research: bool = False) -> str:
-        """Get medical advice based on symptoms, optionally performing deep research."""
-        if not symptoms:
-            return "Please provide symptoms to get medical advice."
+        action = parsed_response.get("action")
+        action_input = parsed_response.get("action_input", {})
 
-        if deep_research:
-            self._report_progress("Deep research initiated for symptoms.")
-            return self.research_orchestrator.run_research_workflow(f"Medical advice for symptoms: {symptoms}")
+        # MODIFIED: Simplified action handling
+        if action == "ask_clarifying_question":
+            question = action_input.get("question", "I have a follow-up question, but it seems to be malformed. Can you clarify?")
+            return {"type": "conversation", "content": question} # Changed type for consistency
+        
+        elif action == "FinalAnswer":
+            summary = action_input.get("summary", "I have a final answer, but it seems to be malformed.")
+            return {"type": "conversation", "content": summary} # Changed type for consistency
+
+        # MODIFIED: The 'initiate_deep_research' action is no longer handled here.
+        # It has been moved to its own dedicated `start_deep_research` method.
+
         else:
-            self._report_progress("Simple query for medical advice.")
-            prompt = f"""Based on the following symptoms, provide general medical advice and recommendations:
-            Symptoms: {symptoms}
-            
-            Please include in your response, if applicable:
-            1. Possible general (non-diagnostic) causes related to these symptoms.
-            2. General self-care or lifestyle recommendations that might be relevant.
-            3. Clear indicators or red flags for when to seek immediate medical attention from a doctor or emergency services.
-            
-            Keep your response concise and focused on these three areas. Do not provide a diagnosis. Conclude by advising to consult a healthcare professional for diagnosis and treatment."""
-            
-            response_message, model_used = self.model_manager.create_completion(
-                messages=[
-                    {"role": "system", "content": self.context_simple_query},
-                    {"role": "user", "content": prompt}
-                ],
-                reasoning_level="high",
-                temperature=0.5,
-                max_tokens=1000
-            )
-            self._report_progress(f"Standard medical advice generated by {model_used}.")
-            return response_message.content if response_message and response_message.content else "Could not retrieve advice at this time."
-
-    def get_medication_info(self, medication: str, deep_research: bool = False) -> str:
-        """Get information about a medication, optionally performing deep research."""
-        if not medication:
-            return "Please provide a medication name to get information."
-
-        if deep_research:
-            self._report_progress("Deep research initiated for medication.")
-            return self.research_orchestrator.run_research_workflow(f"Detailed information for medication: {medication}")
-        else:
-            self._report_progress("Simple query for medication information.")
-            prompt = f"""Provide comprehensive information about the following medication: '{medication}'.
-            
-            Please include in your response:
-            1. Classification and mechanism of action.
-            2. Common uses and indications.
-            3. Typical dosing guidelines (if generally available, state it's general).
-            4. Common side effects.
-            5. Important warnings, precautions, and contraindications.
-            6. Potential major drug interactions to be aware of.
-            
-            Structure the information clearly. Conclude by advising to consult a healthcare professional or pharmacist for specific guidance."""
-            
-            response_message, model_used = self.model_manager.create_completion(
-                messages=[
-                    {"role": "system", "content": self.context_simple_query},
-                    {"role": "user", "content": prompt}
-                ],
-                reasoning_level="medium",
-                temperature=0.4,
-                max_tokens=1200
-            )
-            self._report_progress(f"Standard medication info generated by {model_used}.")
-            return response_message.content if response_message and response_message.content else "Could not retrieve medication information at this time."
-
-    def get_lifestyle_advice(self, condition: str, deep_research: bool = False) -> str:
-        """Get lifestyle advice for a condition, optionally performing deep research."""
-        if not condition:
-            return "Please provide a health condition to get lifestyle advice."
-
-        if deep_research:
-            self._report_progress("Deep research initiated for lifestyle advice.")
-            return self.research_orchestrator.run_research_workflow(f"Lifestyle recommendations for managing: {condition}")
-        else:
-            self._report_progress("Simple query for lifestyle advice.")
-            prompt = f"""Provide lifestyle recommendations for managing or improving the health condition: '{condition}'.
-            
-            Please include in your response, if applicable:
-            1. Dietary recommendations (general guidelines, not specific meal plans).
-            2. Exercise and physical activity guidelines.
-            3. Stress management techniques.
-            4. Sleep hygiene recommendations.
-            5. Habits to consider avoiding or adopting.
-            6. When it is important to consult healthcare professionals regarding these lifestyle changes.
-            
-            Focus on evidence-based, general advice. Conclude by emphasizing consultation with healthcare providers for personalized plans."""
-            
-            response_message, model_used = self.model_manager.create_completion(
-                messages=[
-                    {"role": "system", "content": self.context_simple_query},
-                    {"role": "user", "content": prompt}
-                ],
-                reasoning_level="medium",
-                temperature=0.5,
-                max_tokens=1200
-            )
-            self._report_progress(f"Standard lifestyle advice generated by {model_used}.")
-            return response_message.content if response_message and response_message.content else "Could not retrieve lifestyle advice at this time."
-
-    def _report_progress(self, message: str, status: str = "running") -> None:
-        """Helper to print progress, could be expanded for logging."""
-        print(f"DoctorAI: {message} [Status: {status}]")
-        # If a UI callback is set in orchestrator, it will handle UI updates.
-        # This is mostly for console logging from DoctorAI itself. 
+            # Fallback for any other unexpected action
+            unknown_action_response = f"I'm thinking about performing an action ('{action}'), but I need more clarity. Could you please rephrase your request?"
+            return {"type": "conversation", "content": unknown_action_response}

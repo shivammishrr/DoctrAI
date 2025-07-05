@@ -19,30 +19,28 @@ class ModelManager:
 
     def _initialize_model_configs(self) -> Dict[str, Dict[str, Any]]:
         """Initialize model configurations with their limits and capabilities."""
-        # Update with current Groq models and their known (or estimated) limits
-        # These limits might change, refer to Groq documentation for up-to-date info
         return {
             "llama3-70b-8192": { # Llama 3 70B
                 "context_window": 8192,
-                "tokens_per_minute": 6000, # Example, check Groq for actual limits
+                "tokens_per_minute": 6000, 
                 "reasoning_level": "high",
                 "priority": 1
             },
             "llama3-8b-8192": { # Llama 3 8B
                 "context_window": 8192,
-                "tokens_per_minute": 15000, # Example
+                "tokens_per_minute": 15000, 
                 "reasoning_level": "medium",
                 "priority": 2
             },
             "mixtral-8x7b-32768": { # Mixtral
                 "context_window": 32768,
-                "tokens_per_minute": 6000, # Example
+                "tokens_per_minute": 6000,  
                 "reasoning_level": "high",
                 "priority": 3
             },
             "gemma-7b-it": { # Gemma
                 "context_window": 8192,
-                "tokens_per_minute": 15000, # Example
+                "tokens_per_minute": 15000,
                 "reasoning_level": "medium",
                 "priority": 4
             }
@@ -54,14 +52,12 @@ class ModelManager:
         Prioritizes keeping system messages and truncating user/assistant messages.
         """
         truncated_messages = []
-        # Keep system message intact
         if messages and messages[0]["role"] == "system":
             truncated_messages.append(messages[0])
             messages_to_truncate = messages[1:]
         else:
             messages_to_truncate = messages
 
-        # Simple truncation from the end of content for user/assistant messages
         for msg in reversed(messages_to_truncate): # Process newest first for potential full truncation
             if target_token_count and self._estimate_token_count(truncated_messages + [msg]) <= target_token_count:
                 truncated_messages.insert(1 if truncated_messages and truncated_messages[0]["role"]=="system" else 0, msg)
