@@ -13,23 +13,41 @@ Conversational medical AI assistant powered by Groq LLMs with a proper ReAct age
 
 ## Architecture
 
-```
-User → Streamlit UI (app.py)
-         │
-         ▼
-DoctorAI.process_turn()          ← ReAct loop (up to 5 iterations)
-  │  ├─ LLM call with ALL tools  ← ask_clarifying_question, FinalAnswer,
-  │  │                              tavily_medical_search, wikipedia_medical_search,
-  │  │                              arxiv_medical_search
-  │  ├─ Tool execution & observation feedback
-  │  └─ FinalAnswer or clarifying question returned to UI
-  │
-  └─ DoctorAI.start_deep_research()  ← background thread
-       └─ MedicalResearchOrchestrator.run_research_workflow()
-            ├─ Generate research questions
-            ├─ For each question → tool loop (max 5 iterations)
-            ├─ Critique findings
-            └─ Generate final report → progress Queue → UI polling
+```mermaid
+graph TB
+    User((User)) -->|types message| UI[Streamlit UI<br/>app.py]
+
+    UI -->|user_input + persona| DR[DoctorAI<br/>doctor_ai.py]
+    DR -->|response| UI
+
+    subgraph ReAct_Loop [Conversation Mode - ReAct Loop]
+        DR -->|LLM call with tools| MM[ModelManager<br/>model_manager.py]
+        MM -->|Groq API| LLM[(Groq LLM)]
+        LLM -->|tool_calls| MM
+        MM -->|response| DR
+        DR -->|execute tool| TE[ToolExecutor<br/>tool_functions.py]
+        TE --> ArXiv
+        TE --> Wikipedia
+        TE --> Tavily
+        TE -->|observation| DR
+        DR -->|ask_clarifying_question or FinalAnswer| UI
+    end
+
+    subgraph Deep_Research [Deep Research Mode - Background Thread]
+        DR -->|start_deep_research| ROrch[MedicalResearchOrchestrator<br/>research_orchestrator.py]
+        ROrch -->|1. generate questions| LLM
+        ROrch -->|2. tool loop x5| TE
+        ROrch -->|3. critique findings| LLM
+        ROrch -->|4. final report| DR
+        ROrch -.->|progress Queue| UI
+    end
+
+    style User fill:#1e40af,color:#fff
+    style UI fill:#1e293b,color:#e2e8f0,stroke:#3b82f6
+    style DR fill:#1e293b,color:#e2e8f0,stroke:#3b82f6
+    style MM fill:#1e293b,color:#e2e8f0,stroke:#3b82f6
+    style ROrch fill:#1e293b,color:#e2e8f0,stroke:#3b82f6
+    style TE fill:#1e293b,color:#e2e8f0,stroke:#3b82f6
 ```
 
 ## Project Structure
