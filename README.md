@@ -9,8 +9,6 @@ Conversational medical AI assistant powered by Groq LLMs with a proper ReAct age
 - **Two Research Modes** — Quick conversational answers via the ReAct loop, or a toggleable Deep Research mode that spawns a background thread to generate research questions, run multi-tool investigations, critique findings, and produce a final report with live progress streaming.
 - **Three Specialized Personas** — Symptom Checker, Medication Information, Lifestyle Advisor — each with a tailored system prompt.
 - **Thread-Safe Shared State** — All shared state (sessions, research progress) is protected by `threading.Lock`.
-- **Structured Logging** — `print()` replaced with Python `logging` throughout.
-
 ## Architecture
 
 ```mermaid
