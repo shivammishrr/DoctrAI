@@ -1,6 +1,40 @@
 from typing import List, Dict, Any
 
-# Tool schemas for Groq function calling
+ASK_CLARIFYING_QUESTION_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "ask_clarifying_question",
+        "description": "Ask the user a targeted follow-up question to gather more information or clarify ambiguity before providing your final answer.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "The clarifying question to ask the user."
+                }
+            },
+            "required": ["question"]
+        }
+    }
+}
+
+FINAL_ANSWER_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "FinalAnswer",
+        "description": "Provide your final, conclusive response to the user. Call this when you have sufficient information or have completed your research.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "summary": {
+                    "type": "string",
+                    "description": "The comprehensive final answer to provide to the user, including appropriate medical disclaimers."
+                }
+            },
+            "required": ["summary"]
+        }
+    }
+}
 
 ARXIV_SEARCH_SCHEMA = {
     "type": "function",
@@ -42,7 +76,7 @@ TAVILY_SEARCH_SCHEMA = {
     "type": "function",
     "function": {
         "name": "tavily_medical_search",
-        "description": "Performs a comprehensive web search using the Tavily API, optimized for providing concise and relevant answers to medical questions. Use this for up-to-date information, recent news, or when other specialized tools are insufficient.",
+        "description": "Performs a comprehensive web search using the Tavily API for up-to-date medical information, recent news, or when other specialized tools are insufficient.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -56,9 +90,15 @@ TAVILY_SEARCH_SCHEMA = {
     }
 }
 
-# List of all available tool schemas
-ALL_TOOL_SCHEMAS: List[Dict[str, Any]] = [
+CONVERSATION_TOOL_SCHEMAS: List[Dict[str, Any]] = [
+    ASK_CLARIFYING_QUESTION_SCHEMA,
+    FINAL_ANSWER_SCHEMA,
+]
+
+RESEARCH_TOOL_SCHEMAS: List[Dict[str, Any]] = [
     ARXIV_SEARCH_SCHEMA,
     WIKIPEDIA_SEARCH_SCHEMA,
-    TAVILY_SEARCH_SCHEMA
+    TAVILY_SEARCH_SCHEMA,
 ]
+
+ALL_TOOL_SCHEMAS: List[Dict[str, Any]] = CONVERSATION_TOOL_SCHEMAS + RESEARCH_TOOL_SCHEMAS

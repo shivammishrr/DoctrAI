@@ -1,38 +1,26 @@
-   # Python
-   __pycache__/
-   *.py[cod]
-   *$py.class
-   
-   # Virtual Environment
-   venv/
-   env/
-   
-   # IDE
-   .vscode/
-   .idea/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 
-   # React/Node.js
-   node_modules/
-   /frontend/node_modules
-   /frontend/build
-   /frontend/.pnp
-   /frontend/.pnp.js
-   /frontend/coverage
-   /frontend/.DS_Store
-   /frontend/.env.local
-   /frontend/.env.development.local
-   /frontend/.env.test.local
-   /frontend/.env.production.local
-   /frontend/npm-debug.log*
-   /frontend/yarn-debug.log*
-   /frontend/yarn-error.log*
+# Virtual Environment
+venv/
+env/
 
-   # Flask
-   /static
-   /__pycache__
-   .pytest_cache/
-   .coverage
-   htmlcov/
-   dist/
-   build/
-   *.egg-info/
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Testing
+.pytest_cache/
+tests/__pycache__/
+.coverage
+htmlcov/
+
+# Build
+dist/
+build/
+*.egg-info/
