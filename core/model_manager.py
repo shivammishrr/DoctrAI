@@ -14,37 +14,33 @@ class ModelManager:
             raise ValueError("GROQ_API_KEY not found in environment variables.")
         self.client = Groq(api_key=self.api_key)
         self.model_configs = self._initialize_model_configs()
-        self.current_model = "llama3-70b-8192"
+        self.current_model = "meta-llama/llama-4-scout-17b-16e-instruct"
         self.fallback_attempts = 0
         self.max_fallback_attempts = 3
         self.input_truncation_factor = 0.7
 
     def _initialize_model_configs(self) -> Dict[str, Dict[str, Any]]:
         return {
-            "llama3-70b-8192": {
-                "context_window": 8192,
-                "tokens_per_minute": 6000,
+            "meta-llama/llama-4-scout-17b-16e-instruct": {
+                "context_window": 131072,
                 "reasoning_level": "high",
                 "priority": 1
             },
-            "llama3-8b-8192": {
-                "context_window": 8192,
-                "tokens_per_minute": 15000,
-                "reasoning_level": "medium",
+            "llama-3.3-70b-versatile": {
+                "context_window": 131072,
+                "reasoning_level": "high",
                 "priority": 2
             },
-            "mixtral-8x7b-32768": {
-                "context_window": 32768,
-                "tokens_per_minute": 6000,
-                "reasoning_level": "high",
+            "llama-3.1-8b-instant": {
+                "context_window": 131072,
+                "reasoning_level": "medium",
                 "priority": 3
             },
-            "gemma-7b-it": {
-                "context_window": 8192,
-                "tokens_per_minute": 15000,
-                "reasoning_level": "medium",
+            "qwen/qwen3-32b": {
+                "context_window": 131072,
+                "reasoning_level": "high",
                 "priority": 4
-            }
+            },
         }
 
     def _truncate_messages(self, messages: List[Dict[str, str]], target_token_count: Optional[int] = None) -> List[Dict[str, str]]:

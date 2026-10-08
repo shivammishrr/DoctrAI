@@ -29,7 +29,7 @@ class TestToolDefinitions:
 
     def test_final_answer_schema(self):
         name = FINAL_ANSWER_SCHEMA["function"]["name"]
-        assert name == "FinalAnswer"
+        assert name == "final_answer"
         props = FINAL_ANSWER_SCHEMA["function"]["parameters"]["properties"]
         assert "summary" in props
 

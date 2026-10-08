@@ -87,7 +87,7 @@ class DoctorAI:
                         question = fn_args.get("question", "I have a follow-up question. Can you clarify?")
                         return {"type": "conversation", "content": question, "finish_reason": "ask_clarifying_question"}
 
-                    if fn_name == "FinalAnswer":
+                    if fn_name == "final_answer":
                         summary = fn_args.get("summary", "I have completed my analysis.")
                         return {"type": "conversation", "content": summary, "finish_reason": "final_answer"}
 

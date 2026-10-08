@@ -21,7 +21,7 @@ ASK_CLARIFYING_QUESTION_SCHEMA = {
 FINAL_ANSWER_SCHEMA = {
     "type": "function",
     "function": {
-        "name": "FinalAnswer",
+        "name": "final_answer",
         "description": "Provide your final, conclusive response to the user. Call this when you have sufficient information or have completed your research.",
         "parameters": {
             "type": "object",

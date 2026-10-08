@@ -72,7 +72,7 @@ class TestDoctorAI:
 
             tc = MagicMock()
             tc.id = "call_2"
-            tc.function.name = "FinalAnswer"
+            tc.function.name = "final_answer"
             tc.function.arguments = json.dumps({"summary": "You should rest."})
             message.tool_calls = [tc]
 
@@ -104,12 +104,12 @@ class TestDoctorAI:
 
             tc2 = MagicMock()
             tc2.id = "call_t2"
-            tc2.function.name = "FinalAnswer"
+            tc2.function.name = "final_answer"
             tc2.function.arguments = json.dumps({"summary": "Headache can be caused by stress."})
 
             msg2 = MagicMock()
             msg2.content = None
-            msg2.model_dump.return_value = {"role": "assistant", "content": None, "tool_calls": [{"id": "call_t2", "function": {"name": "FinalAnswer", "arguments": '{"summary": "Headache can be caused by stress."}'}, "type": "function"}]}
+            msg2.model_dump.return_value = {"role": "assistant", "content": None, "tool_calls": [{"id": "call_t2", "function": {"name": "final_answer", "arguments": '{"summary": "Headache can be caused by stress."}'}, "type": "function"}]}
             msg2.tool_calls = [tc2]
 
             mm_instance.create_completion.side_effect = [

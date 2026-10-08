@@ -13,7 +13,7 @@ class TestModelManager:
 
     def test_init_success(self, mock_env_vars, mock_groq_client):
         mm = ModelManager()
-        assert mm.current_model == "llama3-70b-8192"
+        assert mm.current_model == "meta-llama/llama-4-scout-17b-16e-instruct"
         assert len(mm.model_configs) == 4
 
     def test_estimate_token_count_empty(self, mock_env_vars, mock_groq_client):
@@ -27,12 +27,12 @@ class TestModelManager:
 
     def test_get_next_fallback_model_highest_priority(self, mock_env_vars, mock_groq_client):
         mm = ModelManager()
-        next_model = mm.get_next_fallback_model("llama3-70b-8192", "high")
-        assert next_model == "llama3-8b-8192"
+        next_model = mm.get_next_fallback_model("meta-llama/llama-4-scout-17b-16e-instruct", "high")
+        assert next_model == "llama-3.3-70b-versatile"
 
     def test_get_next_fallback_model_no_eligible(self, mock_env_vars, mock_groq_client):
         mm = ModelManager()
-        next_model = mm.get_next_fallback_model("gemma-7b-it", "basic")
+        next_model = mm.get_next_fallback_model("llama-3.1-8b-instant", "basic")
         assert next_model is None
 
     def test_truncate_messages_basic(self, mock_env_vars, mock_groq_client):
@@ -73,7 +73,7 @@ class TestModelManager:
         msg, model = mm.create_completion([{"role": "user", "content": "hello"}])
 
         assert msg.content == "Test response"
-        assert model == "llama3-70b-8192"
+        assert model == "meta-llama/llama-4-scout-17b-16e-instruct"
         mock_groq_client.chat.completions.create.assert_called_once()
 
     def test_create_completion_with_tools(self, mock_env_vars, mock_groq_client):

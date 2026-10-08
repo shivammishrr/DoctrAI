@@ -28,7 +28,7 @@ Available tools:
 - **tavily_medical_search**: Search the web for up-to-date medical information.
 - **wikipedia_medical_search**: Search Wikipedia for general medical information.
 - **arxiv_medical_search**: Search ArXiv for medical research papers.
-- **FinalAnswer**: Provide your final answer to the user.
+- **final_answer**: Provide your final answer to the user.
 
 Guidelines:
 1. Always gather sufficient information before providing a final answer.
